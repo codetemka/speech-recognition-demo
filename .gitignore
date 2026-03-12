@@ -1,0 +1,13 @@
+.env
+.vscode/
+__pycache__/
+job_all/
+job_new/
+job_out/
+job_quick/
+mn_finetune_assets/
+asr.py
+azureml_env_cpu_conda.yml
+harvard.wav
+mn_infer.py
+register_azure_env.py

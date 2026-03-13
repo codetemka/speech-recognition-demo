@@ -79,35 +79,6 @@ def normalize_text(text: str) -> str:
     return text
 
 
-def pick_columns(fieldnames: Iterable[str]) -> Tuple[str, str]:
-    fields = [f for f in fieldnames if f is not None]
-    lower_to_original = {f.strip().lower(): f for f in fields}
-
-    file_candidates = ["file", "filename", "wav", "audio", "path", "audio_filepath"]
-    text_candidates = ["sentence", "text", "transcript", "label", "target"]
-
-    file_col = None
-    text_col = None
-
-    for c in file_candidates:
-        if c in lower_to_original:
-            file_col = lower_to_original[c]
-            break
-    for c in text_candidates:
-        if c in lower_to_original:
-            text_col = lower_to_original[c]
-            break
-
-    if file_col is None and fields:
-        file_col = fields[0]
-    if text_col is None and len(fields) > 1:
-        text_col = fields[-1]
-
-    if not file_col or not text_col:
-        raise ValueError(f"Could not determine file/text columns from CSV header: {fields}")
-    return file_col, text_col
-
-
 def load_samples(labels_csv: Path, audio_dir: Path) -> Tuple[List[Dict], PrepStats, str, str]:
     if not labels_csv.exists():
         raise FileNotFoundError(f"labels CSV not found: {labels_csv}")
@@ -122,7 +93,7 @@ def load_samples(labels_csv: Path, audio_dir: Path) -> Tuple[List[Dict], PrepSta
         reader = csv.DictReader(f)
         if not reader.fieldnames:
             raise ValueError("CSV header is empty.")
-        file_col, text_col = pick_columns(reader.fieldnames)
+        file_col, text_col = "file", "sentence"
 
         for row in reader:
             stats.total_rows += 1
@@ -189,17 +160,6 @@ def split_samples(samples: List[Dict], train_ratio: float, val_ratio: float, see
     n = len(shuffled)
     n_train = int(n * train_ratio)
     n_val = int(n * val_ratio)
-
-    # Keep non-empty splits when data size allows it.
-    if n >= 3:
-        n_train = max(1, min(n_train, n - 2))
-        n_val = max(1, min(n_val, n - n_train - 1))
-    elif n == 2:
-        n_train = 1
-        n_val = 0
-    else:
-        n_train = 1
-        n_val = 0
 
     train = shuffled[:n_train]
     val = shuffled[n_train : n_train + n_val]
@@ -284,7 +244,7 @@ def write_starter_config(
 base_model: '{args.base_model}'
 tokenizer:
   dir: '{tokenizer_dir_str}'
-  type: 'bpe'
+  type: 'unigram'
 
 data:
   sample_rate: {args.sample_rate}

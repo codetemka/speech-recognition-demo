@@ -60,24 +60,13 @@ def parse_args() -> argparse.Namespace:
 
     p.add_argument("--subscription-id", type=str, default=os.getenv("AZURE_SUBSCRIPTION_ID"))
     p.add_argument("--resource-group", type=str, default=os.getenv("AZURE_RESOURCE_GROUP"))
-    p.add_argument(
-        "--workspace-name",
-        type=str,
-        default=os.getenv("AZUREML_WORKSPACE_NAME") or os.getenv("AZURE_ML_WORKSPACE_NAME"),
-    )
-
+    p.add_argument("--workspace-name", type=str, default=os.getenv("AZUREML_WORKSPACE_NAME"))
     p.add_argument("--compute", type=str, default=os.getenv("AZUREML_COMPUTE"), help="Azure ML compute cluster name.")
-    p.add_argument(
-        "--environment",
-        type=str,
-        default=os.getenv("AZUREML_ENVIRONMENT", "azureml:acpt-pytorch-2.2-cuda12.1@latest"),
-        help="Azure ML environment (registered environment, image, or curated env).",
-    )
+    p.add_argument("--environment", type=str,vdefault=os.getenv("AZUREML_ENVIRONMENT"))
     p.add_argument("--experiment-name", type=str, default=os.getenv("AZUREML_EXPERIMENT_NAME", "mn-nemo-finetune"))
     p.add_argument("--display-name", type=str, default=None)
     p.add_argument("--instance-count", type=int, default=1)
     p.add_argument("--stream", action="store_true", help="Stream logs after submission.")
-
     p.add_argument("--labels-path", type=Path, default=Path("labels.csv"))
     p.add_argument("--audio-dir", type=Path, default=Path("audios"))
     p.add_argument("--input-mode", type=str, default="ro_mount", choices=["ro_mount", "download"])
@@ -150,20 +139,6 @@ def strip_quotes(value: str) -> str:
     return value
 
 
-def strip_inline_comment(value: str) -> str:
-    in_single = False
-    in_double = False
-    for idx, ch in enumerate(value):
-        if ch == "'" and not in_double:
-            in_single = not in_single
-            continue
-        if ch == '"' and not in_single:
-            in_double = not in_double
-            continue
-        if ch == "#" and not in_single and not in_double:
-            return value[:idx].rstrip()
-    return value
-
 
 def load_dotenv_file(env_file: Path) -> None:
     if not env_file.exists():
@@ -182,7 +157,6 @@ def load_dotenv_file(env_file: Path) -> None:
 
         key, value = line.split("=", 1)
         key = key.strip()
-        value = strip_inline_comment(value.strip())
         value = strip_quotes(value.strip())
         if not key:
             continue

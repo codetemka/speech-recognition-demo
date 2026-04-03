@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -234,6 +235,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def print_safely(text: str) -> None:
+    try:
+        print(text)
+        return
+    except UnicodeEncodeError:
+        pass
+
+    encoded = (text + "\n").encode(sys.stdout.encoding or "utf-8", errors="backslashreplace")
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        buffer.write(encoded)
+    else:
+        fallback = text.encode("ascii", errors="backslashreplace").decode("ascii")
+        sys.stdout.write(fallback + "\n")
+
+
 def main() -> None:
     args = parse_args()
     cfg = load_yaml(args.config)
@@ -267,7 +284,7 @@ def main() -> None:
         print(f"\nInvalid rows: {len(invalid_df)}")
         sample_n = min(len(invalid_df), max(args.print_invalid_sample, 0))
         if sample_n > 0:
-            print(invalid_df.head(sample_n).to_string(index=False))
+            print_safely(invalid_df.head(sample_n).to_string(index=False))
 
     print(f"\nSaved summary JSON: {summary_path}")
     if bool(reports_cfg.get("save_invalid_rows", True)) and not invalid_df.empty:

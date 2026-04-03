@@ -1,0 +1,10 @@
+{
+  "manifest": "manifests\\train_manifest.jsonl",
+  "text_key": "text",
+  "num_sentences": 10647,
+  "vocab_size": 512,
+  "model_type": "unigram",
+  "character_coverage": 1.0,
+  "tokenizer_model": "artifacts\\tokenizer\\tokenizer.model",
+  "tokenizer_vocab": "artifacts\\tokenizer\\tokenizer.vocab"
+}

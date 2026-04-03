@@ -34,12 +34,26 @@ def build_normalization_config(cfg: Dict[str, Any]) -> NormalizationConfig:
     )
 
 
-def write_manifest(df: pd.DataFrame, path: Path) -> None:
+def to_portable_audio_path(audio_filepath: Any, project_root: Path) -> str:
+    raw = Path(str(audio_filepath))
+    try:
+        resolved = raw.resolve()
+    except Exception:
+        resolved = raw
+
+    try:
+        rel = resolved.relative_to(project_root)
+        return rel.as_posix()
+    except Exception:
+        return resolved.as_posix()
+
+
+def write_manifest(df: pd.DataFrame, path: Path, project_root: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for _, row in df.iterrows():
             obj = {
-                "audio_filepath": str(row["audio_filepath"]),
+                "audio_filepath": to_portable_audio_path(row["audio_filepath"], project_root),
                 "duration": float(row["duration"]),
                 "text": str(row["text"]),
             }
@@ -60,6 +74,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     cfg = load_yaml(args.config)
+    project_root = Path.cwd().resolve()
 
     csv_cfg = cfg.setdefault("csv", {})
     if args.audio_column:
@@ -113,9 +128,9 @@ def main() -> None:
     if test_df.empty:
         print("Warning: test split is empty.")
 
-    write_manifest(train_df, train_manifest)
-    write_manifest(val_df, val_manifest)
-    write_manifest(test_df, test_manifest)
+    write_manifest(train_df, train_manifest, project_root)
+    write_manifest(val_df, val_manifest, project_root)
+    write_manifest(test_df, test_manifest, project_root)
 
     reports_cfg = cfg.get("reports", {}) or {}
     processed_csv_path = Path(reports_cfg.get("processed_csv_path", "reports/processed_labels.csv"))

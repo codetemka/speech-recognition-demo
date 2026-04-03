@@ -13,9 +13,11 @@ import torch
 import yaml
 from lightning.pytorch.callbacks import Callback, EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, open_dict
 
 from nemo.collections.asr.models import ASRModel
+from nemo.collections.asr.losses.rnnt import RNNTLoss
+from nemo.utils import model_utils
 
 
 def load_yaml(path: Path) -> Dict[str, Any]:
@@ -220,6 +222,27 @@ def count_trainable_params(model: ASRModel) -> Dict[str, int]:
     return {"total": total, "trainable": trainable}
 
 
+def resolve_pretrained_model_class(pretrained_name: str) -> Optional[type[ASRModel]]:
+    infos = model_utils.resolve_subclass_pretrained_model_info(ASRModel)
+    for info in infos:
+        name = getattr(info, "pretrained_model_name", None)
+        if name != pretrained_name:
+            continue
+
+        cls = getattr(info, "class_", None)
+        if cls is None:
+            class_path = getattr(info, "class_path", None)
+            if class_path:
+                try:
+                    cls = model_utils.import_class_by_path(class_path)
+                except Exception:
+                    cls = None
+
+        if isinstance(cls, type) and issubclass(cls, ASRModel):
+            return cls
+    return None
+
+
 def load_base_model(cfg: Dict[str, Any], trainer: pl.Trainer) -> ASRModel:
     model_cfg = cfg.get("model", {}) or {}
     pretrained_name = model_cfg.get("pretrained_name")
@@ -233,7 +256,26 @@ def load_base_model(cfg: Dict[str, Any], trainer: pl.Trainer) -> ASRModel:
     if init_from_nemo:
         model = ASRModel.restore_from(restore_path=str(init_from_nemo), map_location="cpu")
     else:
-        model = ASRModel.from_pretrained(model_name=str(pretrained_name))
+        model_name = str(pretrained_name)
+        try:
+            model = ASRModel.from_pretrained(model_name=model_name)
+        except TypeError as exc:
+            if "abstract class ASRModel" not in str(exc):
+                raise
+
+            cls = resolve_pretrained_model_class(model_name)
+            if cls is None:
+                raise RuntimeError(
+                    f"Failed to resolve concrete ASR model class for '{model_name}'. "
+                    "Please set model.init_from_nemo to a concrete .nemo checkpoint "
+                    "or use a supported pretrained model name."
+                ) from exc
+
+            print(
+                f"ASRModel.from_pretrained failed for '{model_name}' due to abstract base class; "
+                f"retrying with concrete class {cls.__name__}."
+            )
+            model = cls.from_pretrained(model_name=model_name)
 
     model.set_trainer(trainer)
     return model
@@ -269,6 +311,71 @@ def update_tokenizer_if_requested(model: ASRModel, cfg: Dict[str, Any]) -> None:
         print("Tokenizer replaced with same vocab size; decoder/joint weights restored.")
     else:
         print("Tokenizer replaced and decoder/joint heads remain reinitialized for new vocabulary.")
+
+
+def override_rnnt_loss_if_requested(model: ASRModel, cfg: Dict[str, Any]) -> None:
+    """
+    Optionally override RNNT loss backend from train config.
+
+    Example config:
+      rnnt_loss:
+        name: tdt_pytorch
+        kwargs: null
+        copy_existing_tdt_kwargs_for_tdt_pytorch: true
+    """
+    override_cfg = cfg.get("rnnt_loss", {}) or {}
+    loss_name_raw = override_cfg.get("name")
+    if not loss_name_raw:
+        return
+
+    if not hasattr(model, "extract_rnnt_loss_cfg") or not hasattr(model, "joint"):
+        print("RNNT loss override requested, but loaded model does not expose RNNT loss hooks; skipping override.")
+        return
+
+    loss_name = str(loss_name_raw)
+    loss_kwargs = override_cfg.get("kwargs")
+
+    # For TDT models, keep duration-related kwargs when switching to tdt_pytorch unless explicitly provided.
+    if (
+        loss_kwargs is None
+        and loss_name == "tdt_pytorch"
+        and bool(override_cfg.get("copy_existing_tdt_kwargs_for_tdt_pytorch", True))
+    ):
+        existing_loss_cfg = model.cfg.get("loss", {}) if hasattr(model, "cfg") else {}
+        loss_kwargs = existing_loss_cfg.get("tdt_kwargs", None)
+
+    if not isinstance(loss_kwargs, (dict, type(None))):
+        raise ValueError("rnnt_loss.kwargs must be an object/dict or null.")
+
+    with open_dict(model.cfg):
+        if model.cfg.get("loss", None) is None:
+            model.cfg.loss = OmegaConf.create({})
+        model.cfg.loss.loss_name = loss_name
+        if loss_kwargs is not None:
+            model.cfg.loss[f"{loss_name}_kwargs"] = loss_kwargs
+
+    resolved_loss_name, resolved_loss_kwargs = model.extract_rnnt_loss_cfg(model.cfg.get("loss", None))
+
+    num_classes = model.joint.num_classes_with_blank - 1
+    if resolved_loss_name in {"tdt", "tdt_pytorch"}:
+        num_classes = num_classes - model.joint.num_extra_outputs
+
+    model.loss = RNNTLoss(
+        num_classes=num_classes,
+        loss_name=resolved_loss_name,
+        loss_kwargs=resolved_loss_kwargs,
+        reduction=model.cfg.get("rnnt_reduction", "mean_batch"),
+    )
+
+    # If fused joint-loss path is active, wire the newly created loss object.
+    if bool(getattr(model.joint, "fuse_loss_wer", False)):
+        model.joint.set_loss(model.loss)
+
+    # Keep decoding config aligned with selected loss (e.g., TDT durations).
+    if hasattr(model, "set_decoding_type_according_to_loss"):
+        model.cfg.decoding = model.set_decoding_type_according_to_loss(model.cfg.decoding)
+
+    print(f"RNNT loss override applied: {resolved_loss_name} (kwargs={resolved_loss_kwargs})")
 
 
 def setup_datasets(model: ASRModel, cfg: Dict[str, Any]) -> None:
@@ -336,7 +443,7 @@ def setup_spec_augment(model: ASRModel, cfg: Dict[str, Any]) -> None:
     model.spec_augment = ASRModel.from_config_dict(OmegaConf.create(config))
 
 
-def build_callbacks(cfg: Dict[str, Any]) -> tuple[List[Callback], ModelCheckpoint]:
+def build_callbacks(cfg: Dict[str, Any], has_logger: bool) -> tuple[List[Callback], ModelCheckpoint]:
     callbacks: List[Callback] = []
 
     ckpt_cfg = cfg.get("checkpointing", {}) or {}
@@ -364,7 +471,8 @@ def build_callbacks(cfg: Dict[str, Any]) -> tuple[List[Callback], ModelCheckpoin
             )
         )
 
-    callbacks.append(LearningRateMonitor(logging_interval="step"))
+    if has_logger:
+        callbacks.append(LearningRateMonitor(logging_interval="step"))
     return callbacks, checkpoint_callback
 
 
@@ -428,8 +536,8 @@ def main() -> None:
 
     seed_all(int(cfg.get("seed", 42)))
 
-    callbacks, checkpoint_callback = build_callbacks(cfg)
     logger = build_logger(cfg)
+    callbacks, checkpoint_callback = build_callbacks(cfg, has_logger=bool(logger))
 
     trainer_cfg = dict(cfg.get("trainer", {}) or {})
     trainer_cfg["callbacks"] = callbacks
@@ -439,6 +547,7 @@ def main() -> None:
 
     model = load_base_model(cfg, trainer)
     update_tokenizer_if_requested(model, cfg)
+    override_rnnt_loss_if_requested(model, cfg)
     setup_datasets(model, cfg)
     model.setup_optimization(OmegaConf.create(cfg.get("optim", {})))
     setup_spec_augment(model, cfg)

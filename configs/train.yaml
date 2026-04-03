@@ -24,6 +24,18 @@ tokenizer:
   type: bpe
   keep_decoder_if_same_vocab: true
 
+# Optional RNNT loss backend override.
+# Use this when numba/cuda linker issues happen on some pods.
+# Example fallback:
+# rnnt_loss:
+#   name: tdt_pytorch
+#   kwargs: null
+#   copy_existing_tdt_kwargs_for_tdt_pytorch: true
+rnnt_loss:
+  name: null
+  kwargs: null
+  copy_existing_tdt_kwargs_for_tdt_pytorch: true
+
 freeze:
   # one of: full_finetune, freeze_lower, gradual_unfreeze
   strategy: freeze_lower

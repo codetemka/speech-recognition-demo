@@ -15,3 +15,15 @@ register_azure_env.py
 # Local model/cache artifacts (too large for regular Git)
 .azureml_model_cache/
 downloaded_model/
+
+# Temporary dependency/debug environments and resolver artifacts
+.venv_locktest/
+.venv_pincheck/
+.venv_pincheck2/
+tmp_meta/
+tmp_linuxcheck/
+tmp_wheelcheck/
+tmp_wheelcheck2/
+tmp_wheelcheck3/
+tmp_requirements_test.txt
+tmp_requirements_test_no_torch.txt

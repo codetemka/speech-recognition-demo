@@ -1,0 +1,51 @@
+{
+  "input": {
+    "labels_csv": "D:\\Projects\\speech-recognition-demo\\labels.csv",
+    "audio_dir": "D:\\Projects\\speech-recognition-demo\\audios",
+    "audio_column": "file",
+    "transcript_column": "sentence",
+    "split_column": null,
+    "num_rows_in_csv": 11831
+  },
+  "validation": {
+    "num_valid_rows": 11830,
+    "num_invalid_rows": 1,
+    "drop_invalid_rows": true
+  },
+  "counts": {
+    "num_files": 11830,
+    "total_duration_sec": 67581.345875,
+    "total_duration_hours": 18.77259607638889,
+    "train_count": 10647,
+    "val_count": 591,
+    "test_count": 592
+  },
+  "duration_distribution_sec": {
+    "min": 0.7780625,
+    "p05": 2.7838281250000003,
+    "p25": 4.176,
+    "p50": 5.379531249999999,
+    "p75": 6.792,
+    "p95": 9.6201625,
+    "max": 27.0580625,
+    "mean": 5.712708865173288,
+    "std": 2.3244063942799724
+  },
+  "transcript_length_distribution_chars": {
+    "min": 7.0,
+    "p05": 30.0,
+    "p25": 47.0,
+    "p50": 65.0,
+    "p75": 84.0,
+    "p95": 119.0,
+    "max": 335.0,
+    "mean": 68.85511411665257,
+    "std": 30.802519994388916
+  },
+  "outputs": {
+    "train_manifest": "manifests\\train_manifest.jsonl",
+    "val_manifest": "manifests\\val_manifest.jsonl",
+    "test_manifest": "manifests\\test_manifest.jsonl",
+    "processed_csv": "reports\\processed_labels.csv"
+  }
+}

@@ -1,0 +1,13 @@
+# Install a CUDA-matched PyTorch build first: https://pytorch.org/get-started/locally/
+lightning>=2.4.0
+nemo_toolkit[asr]>=2.0.0
+omegaconf>=2.3.0
+pandas>=2.2.0
+numpy>=1.26.0
+PyYAML>=6.0.0
+sentencepiece>=0.1.99
+soundfile>=0.12.1
+jiwer>=3.0.4
+tqdm>=4.66.0
+tensorboard>=2.16.0
+wandb>=0.17.0

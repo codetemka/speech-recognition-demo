@@ -1,0 +1,43 @@
+seed: 42
+
+paths:
+  audio_dir: audios
+  labels_csv: labels.csv
+  manifests_dir: manifests
+  reports_dir: reports
+
+csv:
+  encoding: utf-8
+  audio_column: file
+  transcript_column: sentence
+  split_column: null
+  id_column: null
+  add_wav_extension_if_missing: true
+
+splits:
+  train: 0.9
+  val: 0.05
+  test: 0.05
+
+validation:
+  min_duration_sec: 0.1
+  max_duration_sec: 30.0
+  drop_invalid_rows: true
+
+normalization:
+  enabled: true
+  preserve_raw_text: true
+  whitespace_cleanup: true
+  normalize_quotes: true
+  normalize_dashes: true
+  lowercase: false
+  remove_punctuation: false
+  number_normalization:
+    enabled: false
+    mode: conservative
+
+reports:
+  save_invalid_rows: true
+  invalid_rows_path: reports/invalid_rows.csv
+  summary_json_path: reports/dataset_summary.json
+  processed_csv_path: reports/processed_labels.csv

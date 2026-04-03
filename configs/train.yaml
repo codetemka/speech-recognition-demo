@@ -1,0 +1,98 @@
+seed: 42
+
+model:
+  pretrained_name: nvidia/stt_kk_ru_fastconformer_hybrid_large
+  init_from_nemo: null
+
+data:
+  train_manifest: manifests/train_manifest.jsonl
+  val_manifest: manifests/val_manifest.jsonl
+  test_manifest: manifests/test_manifest.jsonl
+  sample_rate: 16000
+  min_duration: 0.1
+  max_duration: 30.0
+  train_batch_size: 8
+  val_batch_size: 8
+  test_batch_size: 8
+  num_workers: 4
+  pin_memory: true
+
+# If update_tokenizer is true, tokenizer artifacts are injected into model.change_vocabulary(...)
+tokenizer:
+  update_tokenizer: true
+  dir: artifacts/tokenizer
+  type: bpe
+  keep_decoder_if_same_vocab: true
+
+freeze:
+  # one of: full_finetune, freeze_lower, gradual_unfreeze
+  strategy: freeze_lower
+  lower_encoder_fraction: 0.7
+  min_layers_to_freeze: 4
+  target_modules_unfrozen:
+    - decoder
+    - joint
+    - aux_ctc
+  gradual_unfreeze:
+    start_epoch: 2
+    end_epoch: 10
+
+spec_augment:
+  enabled: true
+  config:
+    _target_: nemo.collections.asr.modules.SpectrogramAugmentation
+    freq_masks: 2
+    time_masks: 5
+    freq_width: 20
+    time_width: 0.03
+
+optim:
+  name: adamw
+  lr: 5.0e-5
+  betas: [0.9, 0.98]
+  weight_decay: 1.0e-3
+  sched:
+    name: CosineAnnealing
+    warmup_steps: 500
+    min_lr: 1.0e-6
+
+trainer:
+  devices: 1
+  num_nodes: 1
+  accelerator: auto
+  precision: 16-mixed
+  max_epochs: 30
+  max_steps: -1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 20
+  accumulate_grad_batches: 4
+  gradient_clip_val: 1.0
+  num_sanity_val_steps: 0
+  deterministic: true
+  enable_progress_bar: true
+
+checkpointing:
+  dirpath: artifacts/checkpoints
+  filename: mn_asr-{epoch:02d}-{val_wer:.4f}
+  monitor: val_wer
+  mode: min
+  save_top_k: 3
+  save_last: true
+
+early_stopping:
+  enabled: true
+  monitor: val_wer
+  mode: min
+  patience: 8
+  min_delta: 0.0005
+
+logging:
+  type: tensorboard   # tensorboard | wandb | none
+  save_dir: experiments
+  project: mn-asr
+  run_name: kk_ru_fastconformer_hybrid_large_mn
+
+artifacts:
+  save_last_nemo: artifacts/checkpoints/last_model.nemo
+  save_best_nemo: artifacts/checkpoints/best_model.nemo

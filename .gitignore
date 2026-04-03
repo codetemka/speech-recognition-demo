@@ -11,7 +11,7 @@ azureml_env_cpu_conda.yml
 harvard.wav
 mn_infer.py
 register_azure_env.py
-
+.venv
 # Local model/cache artifacts (too large for regular Git)
 .azureml_model_cache/
 downloaded_model/
